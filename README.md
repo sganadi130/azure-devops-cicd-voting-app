@@ -366,6 +366,6 @@ az network public-ip list --output table
 
 ## Author
 
-**Saikrishna Ganadi**
+**Saikrishna Ganadi** — [LinkedIn](https://www.linkedin.com/in/saikrishna-ganadi/)
 
 Built as a hands-on DevOps project implementing CI/CD with Azure DevOps and GitOps principles.
