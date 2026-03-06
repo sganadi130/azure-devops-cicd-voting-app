@@ -1,0 +1,78 @@
+# Docker
+# Build and push an image to Azure Container Registry
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+ paths:
+    include:
+      - vote/* 
+
+resources:
+- repo: self
+
+variables:
+  # Container registry service connection established during pipeline creation
+  dockerRegistryServiceConnection: '768141c0-c5db-4760-976f-5fee904698be'
+  imageRepository: 'votingapp'
+  containerRegistry: 'sganadicontainercicd.azurecr.io'
+  dockerfilePath: '$(Build.SourcesDirectory)/result/Dockerfile'
+  tag: '$(Build.BuildId)'
+
+pool:
+ name: 'azureagent' 
+
+stages:
+- stage: Build
+  displayName: Build 
+  jobs:
+  - job: Build
+    displayName: Build
+
+    steps:
+    - task: Docker@2
+      displayName: Build an Image
+      inputs:
+        containerRegistry: '$(dockerRegistryServiceConnection)'
+        repository: '$(imageRepository)'
+        command: 'build'
+        Dockerfile: 'vote/Dockerfile'
+        tags: '$(tag)'
+
+- stage: Push
+  displayName: Push
+  jobs:
+  - job: Push
+    displayName: Push
+
+    steps:
+    - task: Docker@2
+      displayName: Push the Image
+      inputs:
+        containerRegistry: '$(dockerRegistryServiceConnection)'
+        repository: '$(imageRepository)'
+        command: 'push'
+        tags: '$(tag)'
+
+
+- stage: Update
+  displayName: Update
+  jobs:
+  - job: Update
+    displayName: Update
+    steps:
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -x
+          REPO_URL="https://{PersonalAccessToken}@dev.azure.com/sganadi130/voting-app/_git/voting-app"
+          git clone "$REPO_URL" /tmp/temp_repo
+          cd /tmp/temp_repo
+          git config user.email "pipeline@azuredevops.com"
+          git config user.name "Azure Pipeline"
+          sed -i "s|image:.*|image: sganadicontainercicd.azurecr.io/$(imageRepository):$(tag)|g" k8s-specifications/vote-deployment.yaml
+          cat k8s-specifications/vote-deployment.yaml
+          git add .
+          git commit -m "Update vote image to $(imageRepository):$(tag)"
+          git push
+          rm -rf /tmp/temp_repo
