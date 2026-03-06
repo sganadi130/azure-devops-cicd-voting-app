@@ -413,7 +413,7 @@ New version is live on the cluster
 4. **CRLF issues** are common when editing shell scripts on Windows — always use inline scripts or `dos2unix`
 5. **Secrets management** — never hardcode PATs; use pipeline secret variables
 6. **imagePullSecrets** are required when pulling from private container registries
-
+7. **Migrating from GitHub to Azure DevOps** — experience migrating source code, pipelines, and CI/CD workflows from GitHub to Azure      Repos and Azure Pipelines, including importing repositories, reconfiguring triggers, and setting up service connections
 ---
 
 ## Cleanup
