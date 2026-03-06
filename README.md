@@ -102,11 +102,11 @@ Since we're using a self-hosted agent pool instead of Microsoft-hosted agents:
    sudo ./svc.sh install
    sudo ./svc.sh start
    ```
-7. In Azure DevOps, go to **Organization Settings → Agent Pools → Add Pool** → Self-hosted → Name: `azureagent` → Grant access to all pipelines
+7. In Azure DevOps, go to **Organization Settings → Agent Pools → Add Pool** → Self-hosted → Name: `azureagent` → Grant access to all   pipelines
 
 ### 4. Create CI Pipelines
 
-We create **3 separate pipelines** — one for each microservice (vote, result, worker) — using **path-based triggers** so each pipeline only runs when its corresponding service folder changes.
+   We create **3 separate pipelines** — one for each microservice (vote, result, worker). The vote service pipeline is fully implemen   ted with Build, Push, and Update stages. The result and worker pipelines follow the same pattern with Build and Push stages
 
 #### Pipeline Structure
 
