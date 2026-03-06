@@ -118,80 +118,12 @@ Build → Push → Update
 
 #### Example: Vote Service Pipeline (`azure-pipelines-vote.yml`)
 
-```yaml
-trigger:
-  branches:
-    include:
-      - main
-  paths:
-    include:
-      - vote/*
+See [`azure-pipelines-vote.yml`](azure-pipelines-vote.yml) for the full pipeline configuration.
 
-resources:
-- repo: self
-
-variables:
-  dockerRegistryServiceConnection: '<your-service-connection-id>'
-  imageRepository: 'votingapp'
-  containerRegistry: 'sganadicontainercicd.azurecr.io'
-  tag: '$(Build.BuildId)'
-
-pool:
-  name: 'azureagent'
-
-stages:
-- stage: Build
-  displayName: Build
-  jobs:
-  - job: Build
-    displayName: Build
-    steps:
-    - task: Docker@2
-      displayName: Build the Image
-      inputs:
-        containerRegistry: '$(dockerRegistryServiceConnection)'
-        repository: '$(imageRepository)'
-        command: 'build'
-        Dockerfile: 'vote/Dockerfile'
-        tags: '$(tag)'
-
-- stage: Push
-  displayName: Push
-  jobs:
-  - job: Push
-    displayName: Push
-    steps:
-    - task: Docker@2
-      displayName: Push the Image
-      inputs:
-        containerRegistry: '$(dockerRegistryServiceConnection)'
-        repository: '$(imageRepository)'
-        command: 'push'
-        tags: '$(tag)'
-
-- stage: Update
-  displayName: Update
-  jobs:
-  - job: Update
-    displayName: Update
-    steps:
-    - task: Bash@3
-      inputs:
-        targetType: 'inline'
-        script: |
-          set -x
-          REPO_URL="https://$(PAT)@dev.azure.com/<org>/voting-app/_git/voting-app"
-          git clone "$REPO_URL" /tmp/temp_repo
-          cd /tmp/temp_repo
-          git config user.email "pipeline@azuredevops.com"
-          git config user.name "Azure Pipeline"
-          sed -i "s|image:.*|image: sganadicontainercicd.azurecr.io/$(imageRepository):$(tag)|g" k8s-specifications/vote-deployment.yaml
-          cat k8s-specifications/vote-deployment.yaml
-          git add .
-          git commit -m "Update vote image to $(imageRepository):$(tag)"
-          git push
-          rm -rf /tmp/temp_repo
-```
+Each pipeline has 3 stages:
+- **Build** — Docker builds the image using the service's Dockerfile
+- **Push** — Pushes the image to ACR with `BuildId` as the tag
+- **Update** — Inline Bash script clones the repo, updates the K8s manifest with the new image tag using `sed`, and pushes the change back
 
 > **Important Notes:**
 > - Store the PAT as a **secret pipeline variable**, never hardcode it
