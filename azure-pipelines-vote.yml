@@ -1,36 +1,32 @@
-# Docker
-# Build and push an image to Azure Container Registry
-# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
-
 trigger:
- paths:
+  branches:
     include:
-      - vote/* 
+      - main
+  paths:
+    include:
+      - vote/*
 
 resources:
 - repo: self
 
 variables:
-  # Container registry service connection established during pipeline creation
   dockerRegistryServiceConnection: '768141c0-c5db-4760-976f-5fee904698be'
   imageRepository: 'votingapp'
   containerRegistry: 'sganadicontainercicd.azurecr.io'
-  dockerfilePath: '$(Build.SourcesDirectory)/result/Dockerfile'
   tag: '$(Build.BuildId)'
 
 pool:
- name: 'azureagent' 
+  name: 'azureagent'
 
 stages:
 - stage: Build
-  displayName: Build 
+  displayName: Build
   jobs:
   - job: Build
     displayName: Build
-
     steps:
     - task: Docker@2
-      displayName: Build an Image
+      displayName: Build the Image
       inputs:
         containerRegistry: '$(dockerRegistryServiceConnection)'
         repository: '$(imageRepository)'
@@ -38,12 +34,68 @@ stages:
         Dockerfile: 'vote/Dockerfile'
         tags: '$(tag)'
 
+- stage: SecurityScan
+  displayName: Security Scan
+  jobs:
+  - job: TrivyScan
+    displayName: Trivy Vulnerability Scan
+    steps:
+    - task: Bash@3
+      displayName: Install Trivy
+      inputs:
+        targetType: 'inline'
+        script: |
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+
+    - task: Bash@3
+      displayName: Scan Image for Vulnerabilities
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "Scanning $(containerRegistry)/$(imageRepository):$(tag)"
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --format table \
+            --exit-code 0 \
+            --no-progress \
+            $(containerRegistry)/$(imageRepository):$(tag)
+
+          echo "-------------------------------------------"
+          echo "Generating JSON report for audit..."
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --format json \
+            --output trivy-report.json \
+            --no-progress \
+            $(containerRegistry)/$(imageRepository):$(tag)
+
+          echo "Scan complete. Results:"
+          CRITICAL=$(cat trivy-report.json | grep -o '"Severity":"CRITICAL"' | wc -l)
+          HIGH=$(cat trivy-report.json | grep -o '"Severity":"HIGH"' | wc -l)
+          echo "CRITICAL: $CRITICAL"
+          echo "HIGH: $HIGH"
+
+          # Fail pipeline if critical vulnerabilities found
+          if [ "$CRITICAL" -gt 0 ]; then
+            echo "##[error]CRITICAL vulnerabilities found! Review before pushing."
+            exit 1
+          fi
+
+    - task: PublishBuildArtifacts@1
+      displayName: Publish Trivy Report
+      inputs:
+        pathToPublish: 'trivy-report.json'
+        artifactName: 'trivy-security-report'
+
 - stage: Push
   displayName: Push
   jobs:
   - job: Push
     displayName: Push
-
     steps:
     - task: Docker@2
       displayName: Push the Image
@@ -52,7 +104,6 @@ stages:
         repository: '$(imageRepository)'
         command: 'push'
         tags: '$(tag)'
-
 
 - stage: Update
   displayName: Update
@@ -65,7 +116,7 @@ stages:
         targetType: 'inline'
         script: |
           set -x
-          REPO_URL="https://{PersonalAccessToken}@dev.azure.com/sganadi130/voting-app/_git/voting-app"
+          REPO_URL="https://$(PAT)@dev.azure.com/sganadi130/voting-app/_git/voting-app"
           git clone "$REPO_URL" /tmp/temp_repo
           cd /tmp/temp_repo
           git config user.email "pipeline@azuredevops.com"
