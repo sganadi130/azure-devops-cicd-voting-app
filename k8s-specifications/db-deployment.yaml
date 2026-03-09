@@ -15,19 +15,42 @@ spec:
         app: db
     spec:
       containers:
-      - image: postgres:15-alpine
-        name: postgres
+      - name: db
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
         env:
         - name: POSTGRES_USER
           value: postgres
         - name: POSTGRES_PASSWORD
           value: postgres
-        ports:
-        - containerPort: 5432
-          name: postgres
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+          initialDelaySeconds: 5
+          periodSeconds: 5
         volumeMounts:
-        - mountPath: /var/lib/postgresql/data
-          name: db-data
+        - name: db-data
+          mountPath: /var/lib/postgresql/data
       volumes:
       - name: db-data
-        emptyDir: {} 
+        emptyDir: {}
+

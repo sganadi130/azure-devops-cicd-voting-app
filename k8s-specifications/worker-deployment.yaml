@@ -15,5 +15,14 @@ spec:
         app: worker
     spec:
       containers:
-      - image: dockersamples/examplevotingapp_worker
-        name: worker
+      - name: worker
+        image: sganadicontainercicd.azurecr.io/workerapp:latest
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+      imagePullSecrets:
+      - name: acr-secret
