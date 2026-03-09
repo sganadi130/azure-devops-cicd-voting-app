@@ -11,10 +11,13 @@ A complete end-to-end CI/CD pipeline built using **Azure DevOps**, **Argo CD**, 
 | Tool | Purpose |
 |------|---------|
 | Azure Repos | Source code repository |
-| Azure Pipelines | CI pipeline (Build, Push, Update) |
+| Azure Pipelines | CI pipeline (Build, Security Scan, Push, Update) |
 | Azure Container Registry (ACR) | Docker image storage |
 | Azure Kubernetes Service (AKS) | Kubernetes cluster |
 | Argo CD | GitOps-based continuous delivery |
+| Terraform | Infrastructure as Code |
+| Helm | Kubernetes package management |
+| Trivy | Container security scanning |
 | Docker | Containerization |
 
 ---
@@ -43,7 +46,7 @@ The project is split into two parts:
 
 ### Continuous Integration (Azure DevOps Pipelines)
 
-Developer pushes code → Azure Pipeline triggers → Docker image is built → Pushed to ACR → Shell script updates K8s manifest with new image tag
+Developer pushes code → Azure Pipeline triggers → Docker image is built → Trivy scans for vulnerabilities → Pushed to ACR → Script updates K8s manifest with new image tag
 
 ### Continuous Delivery (GitOps with Argo CD)
 
@@ -74,54 +77,53 @@ Since we're using a self-hosted agent pool instead of Microsoft-hosted agents:
 
 1. **Create a Virtual Machine** in the same resource group
 2. SSH into the VM:
-   ```bash
+```bash
    ssh -i ~/azureagent_key.pem azureuser@<VM_PUBLIC_IP>
-   ```
+```
 3. Set up the agent:
-   ```bash
+```bash
    mkdir myagent && cd myagent
    # Download and extract the agent (upload via scp or curl)
    tar zxvf vsts-agent-linux-x64-4.269.0.tar.gz
-   ```
+```
 4. Configure the agent:
-   ```bash
+```bash
    ./config.sh
    # Server URL: https://dev.azure.com/<your-org>
    # PAT: Generate from Azure DevOps → User Settings → Personal Access Tokens
    # Agent Pool: azureagent
-   ```
+```
 5. Install Docker on the VM:
-   ```bash
+```bash
    sudo apt-get update
    sudo apt-get install docker.io -y
    sudo usermod -aG docker azureuser
    sudo systemctl restart docker
-   ```
+```
 6. Run the agent as a service:
-   ```bash
+```bash
    sudo ./svc.sh install
    sudo ./svc.sh start
-   ```
-7. In Azure DevOps, go to **Organization Settings → Agent Pools → Add Pool** → Self-hosted → Name: `azureagent` → Grant access to all   pipelines
+```
+7. In Azure DevOps, go to **Organization Settings → Agent Pools → Add Pool** → Self-hosted → Name: `azureagent` → Grant access to all pipelines
 
 ### 4. Create CI Pipelines
 
-We create **3 separate pipelines** — one for each microservice (vote, result, worker). The vote service pipeline is fully implemented with Build, Push, and Update stages. The result and worker pipelines follow the same pattern with Build and Push stages.
+We create **3 separate pipelines** — one for each microservice (vote, result, worker). The vote service pipeline is fully implemented with all 4 stages (Build, Security Scan, Push, and Update). The result and worker pipelines follow the same pattern with Build and Push stages — adding the Update stage follows the same pattern, just targeting their respective deployment YAML files.
 
 #### Pipeline Structure
 
-Each pipeline has 3 stages:
-
+Each pipeline has 4 stages:
 ```
-Build → Push → Update
+Build → Security Scan (Trivy) → Push → Update
 ```
 
-#### Example: Vote Service Pipeline (`azure-pipelines-vote.yml`)
+#### Example: Vote Service Pipeline
 
 See [`azure-pipelines-vote.yml`](azure-pipelines-vote.yml) for the full pipeline configuration.
 
-Each pipeline has 3 stages:
 - **Build** — Docker builds the image using the service's Dockerfile
+- **Security Scan** — Trivy scans the image for HIGH/CRITICAL vulnerabilities, fails on CRITICAL
 - **Push** — Pushes the image to ACR with `BuildId` as the tag
 - **Update** — Inline Bash script clones the repo, updates the K8s manifest with the new image tag using `sed`, and pushes the change back
 
@@ -134,12 +136,11 @@ Each pipeline has 3 stages:
 
 ![CI Pipeline](screenshots/CI_Pipeline.png)
 
-All 3 stages complete successfully: Build (32s) → Push (20s) → Update (18s)
+All stages complete successfully: Build (32s) → Push (20s) → Update (18s)
 
 ### 5. Verify Images in ACR
 
 After the pipeline runs, verify images are pushed to ACR:
-
 ```bash
 az acr repository list --name sganadicontainercicd --output table
 az acr repository show-tags --name sganadicontainercicd --repository votingapp --output table
@@ -152,7 +153,6 @@ az acr repository show-tags --name sganadicontainercicd --repository votingapp -
 The Update stage automatically modifies the deployment YAML with the new image tag:
 
 ![Updated Manifest](screenshots/Updates_K8s_Manifests.png)
-
 ```yaml
 containers:
 - image: sganadicontainercicd.azurecr.io/votingapp:29
@@ -179,13 +179,11 @@ imagePullSecrets:
 7. Click **Create**
 
 Connect to the cluster:
-
 ```bash
 az aks get-credentials --name azuredevops --overwrite-existing --resource-group azurecicd
 ```
 
 ### 8. Install Argo CD
-
 ```bash
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
@@ -195,14 +193,12 @@ kubectl get pods -n argocd
 ### 9. Access Argo CD UI
 
 Change the service type from ClusterIP to NodePort:
-
 ```bash
 kubectl edit svc argocd-server -n argocd
 # Change type: ClusterIP → type: NodePort
 ```
 
 Get the external IP and port:
-
 ```bash
 kubectl get nodes -o wide          # Get external IP
 kubectl get svc -n argocd          # Get NodePort
@@ -211,7 +207,6 @@ kubectl get svc -n argocd          # Get NodePort
 Open the port in the VMSS Network Security Group (NSG) in Azure Portal.
 
 Get the initial admin password:
-
 ```bash
 kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.password}" | base64 --decode
 ```
@@ -243,7 +238,6 @@ Login: `admin` / `<decoded password>`
 ### 12. Create Image Pull Secret
 
 Since ACR is a private registry, K8s needs credentials to pull images:
-
 ```bash
 kubectl create secret docker-registry acr-secret \
   --docker-server=sganadicontainercicd.azurecr.io \
@@ -252,13 +246,11 @@ kubectl create secret docker-registry acr-secret \
 ```
 
 Get ACR credentials:
-
 ```bash
 az acr credential show --name sganadicontainercicd
 ```
 
 Add `imagePullSecrets` to your deployment YAMLs:
-
 ```yaml
 spec:
   containers:
@@ -271,13 +263,11 @@ spec:
 ### 13. Speed Up Argo CD Reconciliation
 
 By default, Argo CD checks for changes every 180 seconds. To reduce to 10 seconds:
-
 ```bash
 kubectl edit cm argocd-cm -n argocd
 ```
 
 Add under `data:`:
-
 ```yaml
 data:
   timeout.reconciliation: 10s
@@ -302,7 +292,6 @@ Application accessible at `<NodeIP>:31000` — fully functional voting between D
 ---
 
 ## End-to-End Flow
-
 ```
 Developer pushes code to vote/ folder
         ↓
@@ -310,9 +299,11 @@ Azure Pipeline triggers (path-based)
         ↓
 Stage 1: BUILD — Docker builds the image
         ↓
-Stage 2: PUSH — Image pushed to ACR with BuildId tag
+Stage 2: SECURITY SCAN — Trivy scans for vulnerabilities
         ↓
-Stage 3: UPDATE — Script updates vote-deployment.yaml with new image tag
+Stage 3: PUSH — Image pushed to ACR with BuildId tag
+        ↓
+Stage 4: UPDATE — Script updates vote-deployment.yaml with new image tag
         ↓
 Argo CD detects manifest change in Git repo
         ↓
@@ -320,6 +311,59 @@ Argo CD syncs and deploys updated image to AKS
         ↓
 New version is live on the cluster
 ```
+
+---
+
+## Infrastructure as Code
+
+All Azure infrastructure (AKS, ACR, VNet, NSG, Log Analytics) is defined in Terraform with reusable modules and environment-specific configurations for dev and production. See [`terraform/README.md`](terraform/README.md) for full details.
+```
+terraform/
+├── main.tf                    # Root module
+├── variables.tf               # Input variables with validation
+├── outputs.tf                 # Useful outputs
+├── modules/
+│   ├── network/               # VNet, Subnet, NSG
+│   ├── acr/                   # Container Registry
+│   └── aks/                   # AKS + Log Analytics + ACR pull role
+└── environments/
+    ├── dev/dev.tfvars
+    └── prod/prod.tfvars
+```
+
+---
+
+## Helm Charts
+
+Kubernetes deployments are packaged as Helm charts with environment-specific values for dev and production. Includes resource limits, health probes, and imagePullSecrets. See [`helm/README.md`](helm/README.md) for usage.
+```bash
+# Deploy to dev
+helm install voting-app helm/voting-app -f helm/voting-app/values-dev.yaml
+
+# Deploy to production
+helm install voting-app helm/voting-app -f helm/voting-app/values-prod.yaml
+```
+
+---
+
+## Security Scanning
+
+The CI pipeline includes a **Trivy vulnerability scan** stage between Build and Push. It scans Docker images for HIGH and CRITICAL vulnerabilities, publishes a JSON report as a build artifact, and **fails the pipeline if CRITICAL vulnerabilities are found** — preventing insecure images from reaching production.
+```
+Build → Security Scan (Trivy) → Push → Update
+```
+
+---
+
+## Production Hardening
+
+All deployments include production-grade Kubernetes configurations:
+
+- **Resource requests and limits** — CPU and memory bounds on every container
+- **Liveness probes** — automatic restart of unhealthy pods
+- **Readiness probes** — traffic only routed to ready pods
+- **HorizontalPodAutoscaler (HPA)** — auto-scale vote and result services based on CPU/memory utilization
+- **PodDisruptionBudget (PDB)** — ensures minimum availability during node maintenance or upgrades
 
 ---
 
@@ -345,15 +389,19 @@ New version is live on the cluster
 4. **CRLF issues** are common when editing shell scripts on Windows — always use inline scripts or `dos2unix`
 5. **Secrets management** — never hardcode PATs; use pipeline secret variables
 6. **imagePullSecrets** are required when pulling from private container registries
-7. **Migrating from GitHub to Azure DevOps** — experience migrating source code, pipelines, and CI/CD workflows from GitHub to Azure      Repos and Azure Pipelines, including importing repositories, reconfiguring triggers, and setting up service connections
+7. **Migrating from GitHub to Azure DevOps** — experience migrating source code, pipelines, and CI/CD workflows from GitHub to Azure Repos and Azure Pipelines, including importing repositories, reconfiguring triggers, and setting up service connections
+
 ---
 
 ## Cleanup
 
 To avoid Azure charges, delete resources when done:
-
 ```bash
-# Delete resource group (removes VM, AKS, ACR, etc.)
+# Using Terraform (recommended)
+cd terraform
+terraform destroy -var-file="environments/dev/dev.tfvars"
+
+# Or using Azure CLI
 az group delete --name azurecicd --yes
 
 # Verify no leftover resources
@@ -368,4 +416,4 @@ az network public-ip list --output table
 
 **Saikrishna Ganadi** — [LinkedIn](https://www.linkedin.com/in/saikrishna-ganadi/)
 
-Built as a hands-on DevOps project implementing CI/CD with Azure DevOps and GitOps principles.
+Built as a hands-on DevOps project implementing CI/CD with Azure DevOps, GitOps, Infrastructure as Code, and container security scanning.
