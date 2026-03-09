@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+  labels:
+    app: db
+spec:
+  replicas: {{ .Values.db.replicaCount }}
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      labels:
+        app: db
+    spec:
+      containers:
+      - name: db
+        image: "{{ .Values.db.image.repository }}:{{ .Values.db.image.tag }}"
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: {{ .Values.db.env.POSTGRES_USER }}
+        - name: POSTGRES_PASSWORD
+          value: {{ .Values.db.env.POSTGRES_PASSWORD }}
+        resources:
+          requests:
+            cpu: {{ .Values.db.resources.requests.cpu }}
+            memory: {{ .Values.db.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.db.resources.limits.cpu }}
+            memory: {{ .Values.db.resources.limits.memory }}
+        volumeMounts:
+        - name: db-data
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: db-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+spec:
+  type: ClusterIP
+  ports:
+  - port: {{ .Values.db.service.port }}
+    targetPort: 5432
+  selector:
+    app: db

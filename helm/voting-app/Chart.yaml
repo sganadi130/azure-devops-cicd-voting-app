@@ -1,0 +1,13 @@
+apiVersion: v2
+name: voting-app
+description: A microservices voting application deployed on AKS
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - voting
+  - microservices
+  - kubernetes
+maintainers:
+  - name: Saikrishna Ganadi
+    url: https://www.linkedin.com/in/saikrishna-ganadi/

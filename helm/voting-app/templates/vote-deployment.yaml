@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vote
+  labels:
+    app: vote
+spec:
+  replicas: {{ .Values.vote.replicaCount }}
+  selector:
+    matchLabels:
+      app: vote
+  template:
+    metadata:
+      labels:
+        app: vote
+    spec:
+      containers:
+      - name: vote
+        image: "{{ .Values.vote.image.repository }}:{{ .Values.vote.image.tag }}"
+        imagePullPolicy: {{ .Values.vote.image.pullPolicy }}
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: {{ .Values.vote.resources.requests.cpu }}
+            memory: {{ .Values.vote.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.vote.resources.limits.cpu }}
+            memory: {{ .Values.vote.resources.limits.memory }}
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vote
+spec:
+  type: {{ .Values.vote.service.type }}
+  ports:
+  - port: {{ .Values.vote.service.port }}
+    targetPort: 80
+    nodePort: {{ .Values.vote.service.nodePort }}
+  selector:
+    app: vote

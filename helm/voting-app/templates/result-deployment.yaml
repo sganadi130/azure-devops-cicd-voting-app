@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: result
+  labels:
+    app: result
+spec:
+  replicas: {{ .Values.result.replicaCount }}
+  selector:
+    matchLabels:
+      app: result
+  template:
+    metadata:
+      labels:
+        app: result
+    spec:
+      containers:
+      - name: result
+        image: "{{ .Values.result.image.repository }}:{{ .Values.result.image.tag }}"
+        imagePullPolicy: {{ .Values.result.image.pullPolicy }}
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: {{ .Values.result.resources.requests.cpu }}
+            memory: {{ .Values.result.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.result.resources.limits.cpu }}
+            memory: {{ .Values.result.resources.limits.memory }}
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: result
+spec:
+  type: {{ .Values.result.service.type }}
+  ports:
+  - port: {{ .Values.result.service.port }}
+    targetPort: 80
+    nodePort: {{ .Values.result.service.nodePort }}
+  selector:
+    app: result

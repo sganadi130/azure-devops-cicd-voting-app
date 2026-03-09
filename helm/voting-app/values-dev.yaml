@@ -1,0 +1,7 @@
+# Dev environment overrides
+vote:
+  replicaCount: 1
+result:
+  replicaCount: 1
+worker:
+  replicaCount: 1
