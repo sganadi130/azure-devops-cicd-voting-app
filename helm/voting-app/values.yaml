@@ -3,7 +3,7 @@
 vote:
   replicaCount: 1
   image:
-    repository: sganadicontainercicd.azurecr.io/votingapp
+    repository: sganadicontainercicd.azurecr.io/voting
     tag: "latest"
     pullPolicy: Always
   service:
@@ -21,7 +21,7 @@ vote:
 result:
   replicaCount: 1
   image:
-    repository: sganadicontainercicd.azurecr.io/resultapp
+    repository: sganadicontainercicd.azurecr.io/result
     tag: "latest"
     pullPolicy: Always
   service:
@@ -39,7 +39,7 @@ result:
 worker:
   replicaCount: 1
   image:
-    repository: sganadicontainercicd.azurecr.io/workerapp
+    repository: sganadicontainercicd.azurecr.io/worker
     tag: "latest"
     pullPolicy: Always
   resources:
