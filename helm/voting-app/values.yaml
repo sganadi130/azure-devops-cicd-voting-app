@@ -3,7 +3,7 @@
 vote:
   replicaCount: 1
   image:
-    repository: sganadicontainercicd.azurecr.io/voting
+    repository: sganadicontainercicd.azurecr.io/vote
     tag: "latest"
     pullPolicy: Always
   service:

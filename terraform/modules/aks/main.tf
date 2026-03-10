@@ -67,7 +67,6 @@ resource "azurerm_kubernetes_cluster" "main" {
     enable_auto_scaling = true
     vnet_subnet_id      = var.aks_subnet_id
     os_disk_size_gb     = 30
-    zones               = ["1"]
   }
 
   identity {
