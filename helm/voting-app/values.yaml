@@ -7,9 +7,8 @@ vote:
     tag: "latest"
     pullPolicy: Always
   service:
-    type: NodePort
+    type: ClusterIP
     port: 80
-    nodePort: 31000
   resources:
     requests:
       cpu: 100m
@@ -25,9 +24,8 @@ result:
     tag: "latest"
     pullPolicy: Always
   service:
-    type: NodePort
+    type: ClusterIP
     port: 80
-    nodePort: 31001
   resources:
     requests:
       cpu: 100m
@@ -83,5 +81,3 @@ db:
       cpu: 250m
       memory: 256Mi
 
-imagePullSecrets:
-  - name: acr-secret
